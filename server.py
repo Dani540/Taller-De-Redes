@@ -224,11 +224,12 @@ def main() -> None:
     # UDP también requiere bind() para recibir en un puerto fijo
     udp_sock.bind((TCP_HOST, UDP_PORT))
 
+    display_host = TCP_HOST or "localhost"
     print("╔══════════════════════════════════════════╗")
     print("║   Sala de Sockets — Servidor activo      ║")
     print("╠══════════════════════════════════════════╣")
-    print(f"║  TCP  →  0.0.0.0:{TCP_PORT}  (mensajes)       ║")
-    print(f"║  UDP  →  0.0.0.0:{UDP_PORT}  (drafts live)    ║")
+    print(f"║  TCP  →  {display_host}:{TCP_PORT}  (mensajes)       ║")
+    print(f"║  UDP  →  {display_host}:{UDP_PORT}  (drafts live)    ║")
     print("╚══════════════════════════════════════════╝")
     print("Esperando clientes... Ctrl+C para detener.\n")
 
