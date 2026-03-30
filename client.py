@@ -350,6 +350,12 @@ def chat_ui(stdscr) -> None:
             elif ch in ("\x03", "\x04"):
                 break   # Ctrl+C / Ctrl+D → salir limpiamente
 
+            elif ch in ("\x08", "\x7f"):
+                # Backspace recibido como carácter string (frecuente en Windows)
+                if draft_buf:
+                    draft_buf = draft_buf[:-1]
+                    send_udp(draft_buf)
+
             elif ord(ch) >= 32:
                 # ── KEYSTROKE: envío de borrador por UDP ──────────────────
                 draft_buf += ch
