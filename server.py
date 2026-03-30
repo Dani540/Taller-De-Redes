@@ -179,6 +179,7 @@ def main() -> None:
 
     #   listen(sockfd, BACKLOG) — activa cola de conexiones pasivas
     tcp_sock.listen(BACKLOG)
+    tcp_sock.settimeout(1.0)   # desbloquea accept() cada 1 s → permite Ctrl+C
 
     # ── Socket UDP: SOCK_DGRAM = sin conexión, datagramas, bajo overhead ──
     #   socket(AF_INET, SOCK_DGRAM, 0)
@@ -204,7 +205,10 @@ def main() -> None:
             #   accept(sockfd, addr, addrlen)
             # Bloquea hasta que llega una conexión, retorna (nuevo_fd, dirección)
             # Cada llamada a accept() crea un nuevo descriptor de archivo
-            conn, addr = tcp_sock.accept()
+            try:
+                conn, addr = tcp_sock.accept()
+            except socket.timeout:
+                continue    # Despertar periódico: volver a esperar
 
             # Cada cliente recibe su propio hilo para no bloquear el loop
             threading.Thread(
