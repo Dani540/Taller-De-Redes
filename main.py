@@ -123,7 +123,9 @@ def _ask_mode() -> tuple:
         print("  Opcion invalida, ingresa 1 o 2.")
 
     if choice == "1":
-        return "server", "localhost"
+        print("")
+        host = input("  IP de escucha [Enter = todas las interfaces]: ").strip()
+        return "server", host
 
     # Modo cliente: preguntar host
     print("")
@@ -153,6 +155,8 @@ def main() -> None:
         host = args[1] if len(args) > 1 else "localhost"
 
     if mode == "server":
+        if host:
+            server.TCP_HOST = host
         print("")
         server.main()
 
