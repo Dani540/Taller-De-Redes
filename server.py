@@ -34,15 +34,45 @@ import threading
 from datetime import datetime
 
 # ── Parámetros de red ─────────────────────────────────────────────────────────
-TCP_HOST = ""       # INADDR_ANY: escucha en todas las interfaces
-TCP_PORT = 9000
-UDP_PORT = 9001
-BUFFER   = 4096     # Tamaño del buffer de lectura en bytes
-BACKLOG  = 10       # Máximo de conexiones pendientes en la cola de listen()
+TCP_HOST     = ""   # INADDR_ANY: escucha en todas las interfaces
+TCP_PORT     = 9000
+UDP_PORT     = 9001
+BUFFER       = 4096 # Tamaño del buffer de lectura en bytes
+BACKLOG      = 10   # Máximo de conexiones pendientes en la cola de listen()
+IDLE_TIMEOUT = 20   # Segundos sin clientes antes del apagado automático
 
 # ── Estado compartido entre hilos ─────────────────────────────────────────────
 clients: dict[str, socket.socket] = {}   # { username: socket_TCP }
 clients_lock = threading.Lock()          # Mutex para acceso concurrente al dict
+
+shutdown_event = threading.Event()       # Señal de apagado limpio
+
+# Temporizador de inactividad (protegido por clients_lock)
+had_clients: bool = False                # True desde que se conectó el primer cliente
+idle_timer: threading.Timer | None = None
+
+
+def _idle_shutdown() -> None:
+    """Callback del temporizador: dispara el apagado automático."""
+    print(f"\n[{ts()}] Sala vacía por {IDLE_TIMEOUT}s — cerrando servidor.")
+    shutdown_event.set()
+
+
+def _start_idle_timer() -> None:
+    """Arranca el temporizador de inactividad. Debe llamarse bajo clients_lock."""
+    global idle_timer
+    idle_timer = threading.Timer(IDLE_TIMEOUT, _idle_shutdown)
+    idle_timer.daemon = True
+    idle_timer.start()
+    print(f"[{ts()}] Sala vacía — cerrando en {IDLE_TIMEOUT}s si no hay conexiones.")
+
+
+def _cancel_idle_timer() -> None:
+    """Cancela el temporizador si está activo. Debe llamarse bajo clients_lock."""
+    global idle_timer
+    if idle_timer is not None:
+        idle_timer.cancel()
+        idle_timer = None
 
 
 def ts() -> str:
@@ -102,6 +132,9 @@ def handle_tcp_client(conn: socket.socket, addr: tuple) -> None:
                 conn.sendall(b"ERR:Nombre ya en uso. Elige otro.\n")
                 return
             clients[username] = conn
+            _cancel_idle_timer()   # Nuevo cliente: cancelar cuenta regresiva
+            global had_clients
+            had_clients = True
 
         n = len(clients)
         print(f"[{ts()}][TCP] {username!r} conectado desde {addr[0]}:{addr[1]}")
@@ -132,6 +165,8 @@ def handle_tcp_client(conn: socket.socket, addr: tuple) -> None:
         if username:
             with clients_lock:
                 clients.pop(username, None)
+                if had_clients and not clients:
+                    _start_idle_timer()  # Sala vacía: iniciar cuenta regresiva
             broadcast("SYS", f"[-] {username} abandono la sala.")
             print(f"[{ts()}][TCP] {username!r} desconectado")
         #   close(sockfd) — libera el file descriptor
@@ -208,6 +243,8 @@ def main() -> None:
             try:
                 conn, addr = tcp_sock.accept()
             except socket.timeout:
+                if shutdown_event.is_set():
+                    break   # Temporizador de inactividad disparado
                 continue    # Despertar periódico: volver a esperar
 
             # Cada cliente recibe su propio hilo para no bloquear el loop
